@@ -2,300 +2,45 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>任务系统</title>
-
-<style>
-body{
-    font-family: Arial;
-    background:#f4f6f8;
-    margin:0;
-    padding:20px;
-}
-.container{
-    max-width:1100px;
-    margin:auto;
-    background:#fff;
-    padding:20px;
-    border-radius:12px;
-}
-h1{text-align:center;}
-
-.row{display:flex;gap:10px;margin-bottom:10px;}
-input,button{padding:8px;}
-#taskName{flex:1;}
-
-.add{background:#28a745;color:#fff;border:none;border-radius:6px;}
-
-.stats{
-    background:#eef2f7;
-    padding:10px;
-    border-radius:8px;
-    margin-bottom:10px;
-}
-
-.board{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:10px;
-}
-
-.col{
-    background:#f8f9fa;
-    padding:10px;
-    border-radius:10px;
-    min-height:300px;
-}
-
-.task{
-    background:#fff;
-    border:1px solid #ddd;
-    border-radius:8px;
-    padding:10px;
-    margin-bottom:8px;
-    cursor:grab;
-}
-
-.name{font-weight:bold;}
-
-.timer{
-    font-family:monospace;
-    padding:4px 6px;
-    border-radius:6px;
-    display:inline-block;
-    margin-top:5px;
-}
-
-.red{background:#ffd6d6;color:#c40000;}
-.yellow{background:#fff3cd;color:#8a6d00;}
-.blue{background:#dbe9ff;color:#1e5eff;}
-
-.btns{display:flex;gap:5px;margin-top:5px;}
-
-button{border:none;border-radius:6px;cursor:pointer;}
-.edit{background:#ff9800;color:#fff;}
-.del{background:#dc3545;color:#fff;}
-</style>
+<title>Task V8.1</title>
+<link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <div class="container">
 
-<h1> 外贸跟单系统看板</h1>
+<h1>📊 Task V8.1 Pro</h1>
 
-<div class="stats">
-待办：<span id="todo">0</span> |
-进行中：<span id="doing">0</span> |
-已完成：<span id="done">0</span> |
-逾期：<span id="overdue">0</span>
-</div>
+<input id="search" placeholder="搜索任务...">
 
 <div class="row">
-<input id="taskName" placeholder="任务名称">
-<input type="datetime-local" id="deadline">
-<button class="add" onclick="addTask()">新增</button>
+    <input id="taskName" placeholder="任务名称">
+    <input type="datetime-local" id="deadline">
+    <button onclick="App.addTask()">新增</button>
 </div>
 
 <div class="board">
-<div class="col" id="todoCol" ondrop="drop(event,'todo')" ondragover="allow(event)"><h3>待办</h3></div>
-<div class="col" id="doingCol" ondrop="drop(event,'doing')" ondragover="allow(event)"><h3>进行中</h3></div>
-<div class="col" id="doneCol" ondrop="drop(event,'done')" ondragover="allow(event)"><h3>已完成</h3></div>
+    <div class="col" id="todo" ondrop="UI.drop(event,'todo')" ondragover="UI.allow(event)">
+        <h3>待办</h3>
+    </div>
+
+    <div class="col" id="doing" ondrop="UI.drop(event,'doing')" ondragover="UI.allow(event)">
+        <h3>进行中</h3>
+    </div>
+
+    <div class="col" id="done" ondrop="UI.drop(event,'done')" ondragover="UI.allow(event)">
+        <h3>已完成</h3>
+    </div>
 </div>
 
 </div>
 
-<script>
-
-/* ===== IndexedDB ===== */
-let db;
-let tasks = [];
-
-function openDB(){
-    let req = indexedDB.open("taskDB",1);
-
-    req.onupgradeneeded = e=>{
-        db = e.target.result;
-        db.createObjectStore("tasks",{keyPath:"id"});
-    };
-
-    req.onsuccess = e=>{
-        db = e.target.result;
-        load();
-    };
-}
-
-function saveDB(){
-    let tx = db.transaction("tasks","readwrite");
-    let store = tx.objectStore("tasks");
-    store.clear();
-    tasks.forEach(t=>store.put(t));
-}
-
-function load(){
-    let tx = db.transaction("tasks","readonly");
-    let store = tx.objectStore("tasks");
-    let req = store.getAll();
-
-    req.onsuccess = e=>{
-        tasks = e.target.result || [];
-        render();
-    };
-}
-
-/* ===== Task ===== */
-function addTask(){
-    let name = taskName.value.trim();
-    let time = deadline.value;
-    if(!name || !time) return;
-
-    tasks.push({
-        id:Date.now(),
-        name,
-        end: new Date(time).getTime(),
-        status:"todo",
-        note:"",
-        img:"",
-        created:Date.now()
-    });
-
-    saveDB();
-    render();
-}
-
-function del(id){
-    tasks = tasks.filter(t=>t.id!==id);
-    saveDB();
-    render();
-}
-
-function edit(id){
-    let t = tasks.find(x=>x.id===id);
-    if(!t) return;
-
-    let name = prompt("任务名",t.name);
-    let time = prompt("时间",new Date(t.end).toISOString().slice(0,16));
-
-    if(!name || !time) return;
-
-    t.name = name;
-    t.end = new Date(time).getTime();
-
-    saveDB();
-    render();
-}
-
-function setStatus(id,s){
-    let t = tasks.find(x=>x.id===id);
-    if(t) t.status = s;
-    saveDB();
-    render();
-}
-
-/* ===== Drag ===== */
-function allow(e){e.preventDefault();}
-function drag(e){e.dataTransfer.setData("id",e.target.dataset.id);}
-function drop(e,s){setStatus(Number(e.dataTransfer.getData("id")),s);}
-
-/* ===== Time ===== */
-function format(ms){
-    if(ms<=0) return "已结束";
-    let s=Math.floor(ms/1000);
-    let d=Math.floor(s/86400);s%=86400;
-    let h=Math.floor(s/3600);s%=3600;
-    let m=Math.floor(s/60);
-    let sec=s%60;
-    return (d?d+"天":"")+(h?h+"小时":"")+(m?m+"分":"")+sec+"秒";
-}
-
-function color(ms){
-    let d = ms/86400000;
-    if(d<1) return "red";
-    if(d<=2) return "yellow";
-    return "blue";
-}
-
-/* ===== Reminder ===== */
-function notifyCheck(){
-    let now = Date.now();
-
-    tasks.forEach(t=>{
-        if(t.status==="done") return;
-
-        let diff = t.end - now;
-
-        if(diff<=0 && !t.notified){
-            alert("⏰ 到期：" + t.name);
-            t.notified = true;
-        }
-
-        if(diff>0 && diff<=86400000 && !t.warned){
-            alert("⚠️ 24小时提醒：" + t.name);
-            t.warned = true;
-        }
-    });
-
-    saveDB();
-}
-
-/* ===== Render ===== */
-function render(){
-
-    todoCol.innerHTML="<h3>待办</h3>";
-    doingCol.innerHTML="<h3>进行中</h3>";
-    doneCol.innerHTML="<h3>已完成</h3>";
-
-    let now = Date.now();
-
-    let count = {todo:0,doing:0,done:0,overdue:0};
-
-    tasks.forEach(t=>{
-
-        let diff = t.end-now;
-
-        if(diff<0 && t.status!=="done") count.overdue++;
-        count[t.status]++;
-
-        let div = document.createElement("div");
-        div.className="task";
-        div.draggable=true;
-        div.dataset.id=t.id;
-        div.ondragstart=drag;
-
-        div.innerHTML=`
-            <div class="name">${t.name}</div>
-            <div class="timer ${color(diff)}">${format(diff)}</div>
-            <div class="btns">
-                <button class="edit">修改</button>
-                <button class="del">删除</button>
-            </div>
-        `;
-
-        div.querySelector(".edit").onclick=()=>edit(t.id);
-        div.querySelector(".del").onclick=()=>del(t.id);
-
-        document.getElementById(
-            t.status==="todo"?"todoCol":
-            t.status==="doing"?"doingCol":"doneCol"
-        ).appendChild(div);
-    });
-
-    todo.innerText=count.todo;
-    doing.innerText=count.doing;
-    done.innerText=count.done;
-    overdue.innerText=count.overdue;
-}
-
-/* ===== Loop ===== */
-setInterval(()=>{
-    render();
-    notifyCheck();
-},1000);
-
-/* start */
-openDB();
-
-</script>
+<script src="db.js"></script>
+<script src="storage.js"></script>
+<script src="image.js"></script>
+<script src="reminder.js"></script>
+<script src="ui.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
