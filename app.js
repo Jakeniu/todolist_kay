@@ -3,62 +3,48 @@ let tasks = [];
 const App = {
 
 async init(){
-
     await DB.init();
-    tasks = await Storage.load();
-
-    this.loop();
+    tasks = await DB.getAll();
 },
 
 addTask(){
 
+    const name = taskName.value.trim();
+    const time = deadline.value;
+
+    if(!name || !time) return;
+
     tasks.push({
-        id:Date.now(),
-        name:taskName.value,
-        end:new Date(deadline.value).getTime(),
-        status:"todo"
+        id: Date.now(),
+        name,
+        end: new Date(time).getTime(),
+        status: "todo",
+        notified:false,
+        warned:false
     });
 
-    Storage.save(tasks);
+    DB.saveAll(tasks);
 },
 
 setStatus(id,status){
 
-    let t = tasks.find(x=>x.id===id);
+    const t = tasks.find(x=>x.id===id);
     if(t) t.status = status;
 
-    Storage.save(tasks);
+    DB.saveAll(tasks);
 },
 
 search(){
 
-    let v = search.value;
+    const v = search.value.toLowerCase();
 
-    let f = tasks.filter(t=>
-        t.name.includes(v)
+    const filtered = tasks.filter(t =>
+        t.name.toLowerCase().includes(v)
     );
 
-    UI.render(f);
-},
-
-loop(){
-
-    setInterval(()=>{
-
-        UI.render(tasks);
-
-        Reminder.check(tasks);
-
-    },1000);
-
-    this.bind();
-},
-
-bind(){
-
-    search.oninput=()=>this.search();
+    UI.render(filtered);
 }
 
 };
 
-App.init();
+window.App = App;
