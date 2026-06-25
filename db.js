@@ -19,17 +19,21 @@ const DB = {
 
     getAll(){
         return new Promise(res=>{
-            let tx = this.db.transaction("tasks","readonly");
-            let store = tx.objectStore("tasks");
-            let req = store.getAll();
-            req.onsuccess = ()=>res(req.result);
+            const tx = this.db.transaction("tasks","readonly");
+            const store = tx.objectStore("tasks");
+            const req = store.getAll();
+
+            req.onsuccess = () => {
+                res(req.result || []);
+            };
         });
     },
 
-    saveAll(data){
-        let tx = this.db.transaction("tasks","readwrite");
-        let store = tx.objectStore("tasks");
+    saveAll(tasks){
+        const tx = this.db.transaction("tasks","readwrite");
+        const store = tx.objectStore("tasks");
+
         store.clear();
-        data.forEach(t=>store.put(t));
+        tasks.forEach(t => store.put(t));
     }
 };
