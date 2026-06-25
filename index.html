@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>外贸发货跟进任务系统</title>
+<title>任务系统 V8（专业版）</title>
 
 <style>
 body{
@@ -12,7 +12,6 @@ body{
     margin:0;
     padding:20px;
 }
-
 .container{
     max-width:1100px;
     margin:auto;
@@ -20,28 +19,14 @@ body{
     padding:20px;
     border-radius:12px;
 }
-
 h1{text-align:center;}
 
-.row{
-    display:flex;
-    gap:10px;
-    margin-bottom:15px;
-}
-
+.row{display:flex;gap:10px;margin-bottom:10px;}
 input,button{padding:8px;}
-
 #taskName{flex:1;}
 
-button{
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-}
+.add{background:#28a745;color:#fff;border:none;border-radius:6px;}
 
-.add{background:#28a745;color:#fff;}
-
-/* 统计 */
 .stats{
     background:#eef2f7;
     padding:10px;
@@ -49,7 +34,6 @@ button{
     margin-bottom:10px;
 }
 
-/* 看板 */
 .board{
     display:grid;
     grid-template-columns:repeat(3,1fr);
@@ -58,8 +42,8 @@ button{
 
 .col{
     background:#f8f9fa;
-    border-radius:10px;
     padding:10px;
+    border-radius:10px;
     min-height:300px;
 }
 
@@ -72,44 +56,23 @@ button{
     cursor:grab;
 }
 
-.name{
-    font-weight:bold;
-}
+.name{font-weight:bold;}
 
-/* ⏳ 倒计时颜色区分 */
 .timer{
     font-family:monospace;
-    font-size:13px;
-    padding:4px 8px;
+    padding:4px 6px;
     border-radius:6px;
     display:inline-block;
     margin-top:5px;
 }
 
-/* 🔵 2天以上 */
-.blue{
-    background:#dbe9ff;
-    color:#1e5eff;
-}
+.red{background:#ffd6d6;color:#c40000;}
+.yellow{background:#fff3cd;color:#8a6d00;}
+.blue{background:#dbe9ff;color:#1e5eff;}
 
-/* 🟡 1-2天 */
-.yellow{
-    background:#fff3cd;
-    color:#8a6d00;
-}
+.btns{display:flex;gap:5px;margin-top:5px;}
 
-/* 🔴 少于1天 */
-.red{
-    background:#ffd6d6;
-    color:#c40000;
-}
-
-.btns{
-    display:flex;
-    gap:5px;
-    margin-top:5px;
-}
-
+button{border:none;border-radius:6px;cursor:pointer;}
 .edit{background:#ff9800;color:#fff;}
 .del{background:#dc3545;color:#fff;}
 </style>
@@ -119,261 +82,189 @@ button{
 
 <div class="container">
 
-<h1>📊 外贸发货跟单系统-Kay</h1>
+<h1>📊 V8 专业任务系统</h1>
 
-<!-- 📊 状态统计 -->
 <div class="stats">
-待办：<span id="todoCount">0</span> |
-进行中：<span id="doingCount">0</span> |
-已完成：<span id="doneCount">0</span>
+待办：<span id="todo">0</span> |
+进行中：<span id="doing">0</span> |
+已完成：<span id="done">0</span> |
+逾期：<span id="overdue">0</span>
 </div>
 
-<!-- 新增任务 -->
 <div class="row">
-    <input id="taskName" placeholder="任务名称">
-    <input type="datetime-local" id="deadline">
-    <button class="add" onclick="addTask()">新增任务</button>
+<input id="taskName" placeholder="任务名称">
+<input type="datetime-local" id="deadline">
+<button class="add" onclick="addTask()">新增</button>
 </div>
 
-<!-- 看板 -->
 <div class="board">
-    <div class="col" id="todo" ondrop="drop(event,'todo')" ondragover="allow(event)">
-        <h3>待办</h3>
-    </div>
-
-    <div class="col" id="doing" ondrop="drop(event,'doing')" ondragover="allow(event)">
-        <h3>进行中</h3>
-    </div>
-
-    <div class="col" id="done" ondrop="drop(event,'done')" ondragover="allow(event)">
-        <h3>已完成</h3>
-    </div>
+<div class="col" id="todoCol" ondrop="drop(event,'todo')" ondragover="allow(event)"><h3>待办</h3></div>
+<div class="col" id="doingCol" ondrop="drop(event,'doing')" ondragover="allow(event)"><h3>进行中</h3></div>
+<div class="col" id="doneCol" ondrop="drop(event,'done')" ondragover="allow(event)"><h3>已完成</h3></div>
 </div>
 
 </div>
 
 <script>
 
-let tasks = JSON.parse(localStorage.getItem("tasks_v7") || "[]");
+/* ===== IndexedDB ===== */
+let db;
+let tasks = [];
 
-/* 🔔 已提醒记录（防重复弹窗） */
-let notified = JSON.parse(localStorage.getItem("notified_v7") || "{}");
+function openDB(){
+    let req = indexedDB.open("taskDB",1);
 
-function save(){
-    localStorage.setItem("tasks_v7", JSON.stringify(tasks));
-    localStorage.setItem("notified_v7", JSON.stringify(notified));
+    req.onupgradeneeded = e=>{
+        db = e.target.result;
+        db.createObjectStore("tasks",{keyPath:"id"});
+    };
+
+    req.onsuccess = e=>{
+        db = e.target.result;
+        load();
+    };
 }
 
-/* 新增 */
-function addTask(){
-    const name = document.getElementById("taskName").value.trim();
-    const deadline = document.getElementById("deadline").value;
+function saveDB(){
+    let tx = db.transaction("tasks","readwrite");
+    let store = tx.objectStore("tasks");
+    store.clear();
+    tasks.forEach(t=>store.put(t));
+}
 
-    if(!name) return alert("请输入任务");
-    if(!deadline) return alert("请选择时间");
+function load(){
+    let tx = db.transaction("tasks","readonly");
+    let store = tx.objectStore("tasks");
+    let req = store.getAll();
+
+    req.onsuccess = e=>{
+        tasks = e.target.result || [];
+        render();
+    };
+}
+
+/* ===== Task ===== */
+function addTask(){
+    let name = taskName.value.trim();
+    let time = deadline.value;
+    if(!name || !time) return;
 
     tasks.push({
-        id: Date.now(),
+        id:Date.now(),
         name,
-        endTime: new Date(deadline).getTime(),
-        status: "todo"
+        end: new Date(time).getTime(),
+        status:"todo",
+        note:"",
+        img:"",
+        created:Date.now()
     });
 
-    document.getElementById("taskName").value="";
-    save();
+    saveDB();
     render();
 }
 
-/* 删除 */
 function del(id){
     tasks = tasks.filter(t=>t.id!==id);
-    delete notified[id];
-    save();
+    saveDB();
     render();
 }
 
-/* 修改 */
 function edit(id){
-    const t = tasks.find(x => x.id === id);
+    let t = tasks.find(x=>x.id===id);
     if(!t) return;
 
-    // 当前时间转 datetime-local 格式
-    const dt = new Date(t.endTime);
-    const local = new Date(dt.getTime() - dt.getTimezoneOffset()*60000)
-        .toISOString().slice(0,16);
+    let name = prompt("任务名",t.name);
+    let time = prompt("时间",new Date(t.end).toISOString().slice(0,16));
 
-    // 创建遮罩弹窗（不破坏UI）
-    const mask = document.createElement("div");
-    mask.style.position = "fixed";
-    mask.style.top = "0";
-    mask.style.left = "0";
-    mask.style.width = "100%";
-    mask.style.height = "100%";
-    mask.style.background = "rgba(0,0,0,0.4)";
-    mask.style.display = "flex";
-    mask.style.alignItems = "center";
-    mask.style.justifyContent = "center";
-    mask.style.zIndex = "9999";
+    if(!name || !time) return;
 
-    mask.innerHTML = `
-        <div style="
-            background:#fff;
-            padding:20px;
-            border-radius:10px;
-            width:320px;
-        ">
-            <h3 style="margin-top:0;">修改任务</h3>
+    t.name = name;
+    t.end = new Date(time).getTime();
 
-            <input id="editName" style="width:100%;padding:8px;margin-bottom:10px;"
-                value="${t.name}">
-
-            <input id="editTime" type="datetime-local"
-                style="width:100%;padding:8px;margin-bottom:10px;"
-                value="${local}">
-
-            <div style="display:flex;justify-content:flex-end;gap:10px;">
-                <button id="cancelBtn">取消</button>
-                <button id="saveBtn" style="background:#28a745;color:#fff;">保存</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(mask);
-
-    // 取消
-    mask.querySelector("#cancelBtn").onclick = () => {
-        document.body.removeChild(mask);
-    };
-
-    // 保存
-    mask.querySelector("#saveBtn").onclick = () => {
-
-        const newName = mask.querySelector("#editName").value.trim();
-        const newTime = mask.querySelector("#editTime").value;
-
-        if(!newName || !newTime){
-            alert("任务名和时间不能为空");
-            return;
-        }
-
-        t.name = newName;
-        t.endTime = new Date(newTime).getTime();
-
-        save();
-        render(); // 或 renderAll()
-        document.body.removeChild(mask);
-    };
-}
-
-/* 状态 */
-function setStatus(id,status){
-    const t = tasks.find(x=>x.id===id);
-    if(!t) return;
-    t.status = status;
-
-    if(status === "done"){
-        delete notified[id];
-    }
-
-    save();
+    saveDB();
     render();
 }
 
-/* 拖拽 */
-function allow(e){ e.preventDefault(); }
-
-function drag(e){
-    e.dataTransfer.setData("id", e.target.dataset.id);
+function setStatus(id,s){
+    let t = tasks.find(x=>x.id===id);
+    if(t) t.status = s;
+    saveDB();
+    render();
 }
 
-function drop(e,status){
-    const id = e.dataTransfer.getData("id");
-    setStatus(Number(id), status);
-}
+/* ===== Drag ===== */
+function allow(e){e.preventDefault();}
+function drag(e){e.dataTransfer.setData("id",e.target.dataset.id);}
+function drop(e,s){setStatus(Number(e.dataTransfer.getData("id")),s);}
 
-/* ⏳ 时间格式 */
+/* ===== Time ===== */
 function format(ms){
     if(ms<=0) return "已结束";
-
     let s=Math.floor(ms/1000);
-    const d=Math.floor(s/86400); s%=86400;
-    const h=Math.floor(s/3600); s%=3600;
-    const m=Math.floor(s/60);
-    const sec=s%60;
-
+    let d=Math.floor(s/86400);s%=86400;
+    let h=Math.floor(s/3600);s%=3600;
+    let m=Math.floor(s/60);
+    let sec=s%60;
     return (d?d+"天":"")+(h?h+"小时":"")+(m?m+"分":"")+sec+"秒";
 }
 
-/* 🎨 颜色 */
-function getColor(ms){
-    const day = ms / 86400000;
-    if(day < 1) return "red";
-    if(day <= 2) return "yellow";
+function color(ms){
+    let d = ms/86400000;
+    if(d<1) return "red";
+    if(d<=2) return "yellow";
     return "blue";
 }
 
-/* 📊 统计 */
-function updateStats(){
-    document.getElementById("todoCount").innerText =
-        tasks.filter(t=>t.status==="todo").length;
-
-    document.getElementById("doingCount").innerText =
-        tasks.filter(t=>t.status==="doing").length;
-
-    document.getElementById("doneCount").innerText =
-        tasks.filter(t=>t.status==="done").length;
-}
-
-/* 🔔 到期提醒核心逻辑 */
-function checkReminder(){
-
-    const now = Date.now();
+/* ===== Reminder ===== */
+function notifyCheck(){
+    let now = Date.now();
 
     tasks.forEach(t=>{
+        if(t.status==="done") return;
 
-        if(t.status === "done") return;
+        let diff = t.end - now;
 
-        const remain = t.endTime - now;
+        if(diff<=0 && !t.notified){
+            alert("⏰ 到期：" + t.name);
+            t.notified = true;
+        }
 
-        /* 已到期 & 未提醒 */
-        if(remain <= 0 && !notified[t.id]){
-
-            alert("⏰ 任务到期：" + t.name);
-
-            notified[t.id] = true;
+        if(diff>0 && diff<=86400000 && !t.warned){
+            alert("⚠️ 24小时提醒：" + t.name);
+            t.warned = true;
         }
     });
 
-    save();
+    saveDB();
 }
 
-/* 渲染 */
+/* ===== Render ===== */
 function render(){
 
-    ["todo","doing","done"].forEach(id=>{
-        const col=document.getElementById(id);
-        col.innerHTML=`<h3>${col.querySelector("h3")?.innerText || ""}</h3>`;
-    });
+    todoCol.innerHTML="<h3>待办</h3>";
+    doingCol.innerHTML="<h3>进行中</h3>";
+    doneCol.innerHTML="<h3>已完成</h3>";
 
-    const now = Date.now();
+    let now = Date.now();
+
+    let count = {todo:0,doing:0,done:0,overdue:0};
 
     tasks.forEach(t=>{
 
-        const remain = t.endTime - now;
+        let diff = t.end-now;
 
-        const div = document.createElement("div");
+        if(diff<0 && t.status!=="done") count.overdue++;
+        count[t.status]++;
+
+        let div = document.createElement("div");
         div.className="task";
-        div.dataset.id=t.id;
         div.draggable=true;
+        div.dataset.id=t.id;
         div.ondragstart=drag;
 
         div.innerHTML=`
             <div class="name">${t.name}</div>
-
-            <div class="timer ${getColor(remain)}">
-                ${format(remain)}
-            </div>
-
+            <div class="timer ${color(diff)}">${format(diff)}</div>
             <div class="btns">
                 <button class="edit">修改</button>
                 <button class="del">删除</button>
@@ -383,21 +274,26 @@ function render(){
         div.querySelector(".edit").onclick=()=>edit(t.id);
         div.querySelector(".del").onclick=()=>del(t.id);
 
-        document.getElementById(t.status).appendChild(div);
+        document.getElementById(
+            t.status==="todo"?"todoCol":
+            t.status==="doing"?"doingCol":"doneCol"
+        ).appendChild(div);
     });
 
-    updateStats();
-    save();
+    todo.innerText=count.todo;
+    doing.innerText=count.doing;
+    done.innerText=count.done;
+    overdue.innerText=count.overdue;
 }
 
-/* 🚀 每秒刷新 + 检查提醒 */
+/* ===== Loop ===== */
 setInterval(()=>{
     render();
-    checkReminder();
+    notifyCheck();
 },1000);
 
-render();
-
+/* start */
+openDB();
 
 </script>
 
